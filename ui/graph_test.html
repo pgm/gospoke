@@ -1,0 +1,78 @@
+<html>
+<head>
+
+<style type="text/css">
+/*margin and padding on body element
+  can introduce errors in determining
+  element position and are not recommended;
+  we turn them off as a foundation for YUI
+  CSS treatments. */
+body {
+	margin:0;
+	padding:0;
+}
+</style>
+
+<!-- Individual YUI CSS files --> 
+<link rel="stylesheet" type="text/css" href="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/button/assets/skins/sam/button.css"> 
+<link rel="stylesheet" type="text/css" href="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/logger/assets/skins/sam/logger.css"> 
+<!-- Individual YUI JS files --> 
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/yahoo/yahoo-debug.js"></script> 
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/dom/dom-debug.js"></script> 
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/event/event-debug.js"></script> 
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/element/element-debug.js"></script> 
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/button/button-debug.js"></script> 
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/yui/2.8.1/build/logger/logger-debug.js"></script> 
+
+</head>
+<body class="yui-skin-sam">
+
+<div id="pushbuttons"></div>
+<img id="graph" src="/graph/ping?time=8"/>
+
+<script type="text/javascript">
+
+var initialize = function() {
+
+var stopTime = Math.floor(new Date().getTime()/1000);
+
+var refreshTimeout;
+
+var refreshImage = function() {
+	console.log("refresh")
+	var imgTag = YAHOO.util.Dom.get("graph");
+	imgTag.src = "/graph/ping?refresh="+new Date().getTime();
+}
+
+refreshTimeout = setInterval(refreshImage, 10000);
+
+
+function makeAdjustStopFn(delta) { 
+	return function() {
+		stopTime += delta;
+		
+		var imgTag = YAHOO.util.Dom.get("graph");
+
+		imgTag.src = "/graph/ping?stop_time="+stopTime;
+		if(refreshTimeout != null) {
+			clearInterval(refreshTimeout);
+			refreshTimeout = null;
+		}
+	}
+}
+
+var earlierButton = new YAHOO.widget.Button({ 
+                            label:"Earlier",  
+                            container:"pushbuttons" });
+var laterButton = new YAHOO.widget.Button({ 
+                            label:"Later",  
+                            container:"pushbuttons" });
+earlierButton.on("click", makeAdjustStopFn(-60*60));
+laterButton.on("click", makeAdjustStopFn(60*60));
+};
+
+YAHOO.util.Event.onDOMReady(initialize, "The onDOMReady event fired.  The DOM is now safe to modify via script."); 
+
+</script>
+</body>
+</html>

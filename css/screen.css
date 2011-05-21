@@ -1,0 +1,55 @@
+.event-class-0 {
+padding: 5 px;
+-moz-border-radius: 5px;
+border-radius: 5px;
+background-color: green;
+color: white;
+}
+
+.event-class-1 {
+padding: 5 px;
+-moz-border-radius: 5px;
+border-radius: 5px;
+background-color: blue;
+color: white;
+}
+
+.event-class-2 {
+padding: 5 px;
+-moz-border-radius: 5px;
+border-radius: 5px;
+background-color: orange;
+color: black;
+}
+
+.event-class-3 {
+padding: 5 px;
+-moz-border-radius: 5px;
+border-radius: 5px;
+background-color: red;
+color: white;
+}
+
+.event-class-4 {
+padding: 5 px;
+-moz-border-radius: 5px;
+border-radius: 5px;
+background-color: black;
+color: white;
+}
+
+.event-class-5 {
+padding: 5 px;
+-moz-border-radius: 5px;
+border-radius: 5px;
+background-color: red;
+color: white;
+}
+
+tbody tr.service-disabled td {
+background-color: #CCC;
+}
+
+tbody tr.service-enabled td {
+background-color: #FFF;
+}

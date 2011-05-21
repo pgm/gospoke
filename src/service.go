@@ -45,20 +45,41 @@ type ServiceHub struct {
 	logEntryCounter int
 }
 
+type ServiceSnapshot struct {
+	Name string
+	Status int
+}
+
+func (h *ServiceHub) GetServiceSnapshots() []ServiceSnapshot {
+	ss := make([]ServiceSnapshot, 0, len(h.services))
+	
+	for _, v := range(h.services) {
+		ss = append(ss, ServiceSnapshot{v.Name, v.Status})
+	}
+	
+	return ss
+}
+
+
 func NewServiceHub(timeline *Timeline) *ServiceHub {
 	hub := &ServiceHub{timeline: timeline, services: make(map[string] *Service)}
 	return hub
 }
 
 func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int) {
+	var s *Service
+
 	heartbeatCallback := func(name string, isFailure bool) {
 		if isFailure {
 			h.Log(serviceName, WARN, "Heartbeat failure", h.timeline.Now())
+			s.Status = STATUS_DOWN
+		} else {
+			s.Status = STATUS_UP
 		}
 	}
 
 	monitor := NewHeartbeatMonitor(h.timeline, serviceName, heartbeatTimeout, heartbeatCallback)
-	s := &Service{Name: serviceName, Monitor: monitor, Status: STATUS_UNKNOWN}
+	s = &Service{Name: serviceName, Monitor: monitor, Status: STATUS_UNKNOWN}
 	
 	h.services[serviceName] = s
 	
@@ -69,7 +90,6 @@ func (h *ServiceHub) Heartbeat(serviceName string) {
 	service := h.getService(serviceName)
 	
 	if service.Monitor != nil {
-		log.Println("Calling heartbeat on \"%s\"", serviceName)
 		service.Monitor.Heartbeat()
 	} else {
 		log.Println("Unknown service \"%s\"", serviceName)
@@ -108,8 +128,6 @@ func (l *ServiceLog) FindAfter(sequence int) []*LogEntry {
 	return result
 }
 
-const MAX_NOTIFY_FREQUENCY = 60
-
 type ExecutorFn func (command string, input string)
 
 type Notifier struct { 
@@ -119,15 +137,16 @@ type Notifier struct {
 	timeline *Timeline
 	hub *ServiceHub
 	executor ExecutorFn
+	throttle int64
 }
 
-func NewNotifier(command string, executor ExecutorFn, timeline *Timeline, hub *ServiceHub) *Notifier {
-	return &Notifier{command: command, timeline: timeline, hub: hub, executor: executor}
+func NewNotifier(command string, throttle int, executor ExecutorFn, timeline *Timeline, hub *ServiceHub) *Notifier {
+	return &Notifier{command: command, throttle: int64(throttle), timeline: timeline, hub: hub, executor: executor}
 }
 
 func (n *Notifier) CheckAndSendNotifications() {
 	now := n.timeline.Now()
-	if now - n.lastSendTimestamp >= MAX_NOTIFY_FREQUENCY { 
+	if now - n.lastSendTimestamp >= n.throttle { 
 		// enough time has passed since the last send 
 		// so we can flush the event queue
 		
@@ -135,7 +154,7 @@ func (n *Notifier) CheckAndSendNotifications() {
 		n.sendNotificationSummary()
 	} else {
 		// too soon, so schedule a check of the queue after enough time has passed
-		n.timeline.Schedule(n.lastSendTimestamp + MAX_NOTIFY_FREQUENCY, func() { n.CheckAndSendNotifications() } )
+		n.timeline.Schedule(n.lastSendTimestamp + n.throttle, func() { n.CheckAndSendNotifications() } )
 	}
 }
 

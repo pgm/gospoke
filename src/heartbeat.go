@@ -17,7 +17,6 @@ type HeartbeatMonitor struct {
 
 func (h *HeartbeatMonitor) scheduleHeartbeatTimeout() {
 	nextTimeout := h.lastHeartbeat + int64(h.period)
-	log.Printf("scheduling timeout for %v\n", nextTimeout);
 	h.timeline.Schedule(nextTimeout, func() { h.checkHeartbeatTimeout() } )
 }
 

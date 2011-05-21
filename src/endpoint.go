@@ -3,9 +3,6 @@ package main
 import (
 	"http"
 	"log"
-	"os"
-	"fmt"
-//	"time"
 	"json"
 	"io"
 	)
@@ -13,12 +10,6 @@ import (
 type Sample struct { }
 
 type Args struct { }
-
-func (s *Sample) Method1 (args *Args, reply *bool) os.Error {
-	fmt.Printf("method1\n")
-	*reply = true	
-	return nil
-}
 
 type JsonRpcCallback func (map[string] interface{}) interface{}
 
@@ -71,16 +62,6 @@ func makeJsonRpcError(code int, msg string) map[string] interface{} {
 type SetStatusCodeFn func (code int) 
 
 func (j *JsonRpcHandler) ExecuteJson(request io.Reader, response io.Writer, setStatus SetStatusCodeFn) {
-//	rawRequest, err := ioutil.ReadAll(request) 
-//	fmt.Printf("rawRequest=%v err=%v\n", rawRequest, err)
-//	if err != nil {
-//		return
-//	}
-//
-//	rawRequestStr := bytes.NewBuffer(rawRequest).String()
-//	requestStr := rawRequestStr
-//	d := json.NewDecoder(strings.NewReader(requestStr))
-
 	d := json.NewDecoder(request)
 
 	var requestMap map[string] interface{}
@@ -100,8 +81,6 @@ func (j *JsonRpcHandler) ExecuteJson(request io.Reader, response io.Writer, setS
 }
 
 func (j JsonRpcHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	fmt.Printf("method = %s\n", req.Method)
-	
 	if req.Method != "POST" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -122,8 +101,6 @@ func StartJsonRpcServer (hub *ServiceHub) {
 	
 	r.Register("heartbeat", func(params map[string] interface{}) interface{} {
 		name := params["name"].(string)
-		
-		fmt.Printf("name=%s\n", name)
 		
 		hub.Heartbeat(name)
 

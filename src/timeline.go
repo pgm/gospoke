@@ -94,10 +94,7 @@ func (t Timeline) Now () int64 {
 }
 
 func (t *Timeline) Schedule(timestamp int64, callback CallbackFn) {
-	log.Println("s lock")
 	t.lock.Lock()
-	log.Println("s locked")
-
 	defer t.lock.Unlock()
 	
 	seq := t.nextSeq
@@ -150,11 +147,8 @@ func (t *Timeline) processNextEventAssumingLocked() bool {
 				if(e != removed) { panic("wrong element removed") }
 
 				t.lock.Unlock()
-				log.Println("unlock")
 				e.Callback()
-				log.Println("lock")
 				t.lock.Lock()
-				log.Println("locked")
 				
 				break
 			}
@@ -165,9 +159,7 @@ func (t *Timeline) processNextEventAssumingLocked() bool {
 }
 
 func (t *Timeline) ProcessNextEvent() bool {
-	log.Println("p lock")
 	t.lock.Lock()
-	log.Println("p locked")
 	defer t.lock.Unlock()
 
 	return t.processNextEventAssumingLocked()
@@ -215,6 +207,15 @@ func (t *Timeline) RunUntil(timestamp int64) {
 	}
 }
 
+func (t *Timeline) Execute(c CallbackFn) {
+	a := make(chan bool)
+	t.Schedule(t.Now(), func() { 
+		c()
+		a <- true
+		})
+	_ = <-a
+}
+
 
 ////////////
 
@@ -230,7 +231,6 @@ func (t *SimulatedTimer) SleepUntil(cond *sync.Cond, time int64) {
 	if t.time < time {
 		t.time = time
 	}
-	log.Println("Sleeping until", time)
 }
 
 func (t SimulatedTimer) Sleep(cond *sync.Cond) {
