@@ -1,3 +1,6 @@
+GOROOT := /Users/pgm/dev/go
+PATH := $(GOROOT)/bin:$(PATH)
+
 include $(GOROOT)/src/Make.inc
 
 TARG=gospoke

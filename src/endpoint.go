@@ -2,7 +2,7 @@ package main
 
 import (
 	"http"
-	"log"
+//	"log"
 	"json"
 	"io"
 	)
@@ -96,7 +96,8 @@ func (j JsonRpcHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-func StartJsonRpcServer (hub *ServiceHub) {
+func MewJsonRpcHandler (hub ThreadSafeServiceHub, timeline *Timeline) *JsonRpcHandler{
+
 	r := new(JsonRpcHandler)
 	
 	r.Register("heartbeat", func(params map[string] interface{}) interface{} {
@@ -113,14 +114,11 @@ func StartJsonRpcServer (hub *ServiceHub) {
 		summary := params["summary"].(string)
 		severity := params["severity"].(int)
 
-		hub.Log(name, severity, summary, hub.timeline.Now())
+		hub.Log(name, summary, severity, timeline.Now())
 		
 		return true
 	})
-	
-	e := http.ListenAndServe(":12345", r)
-	if e != nil {
-		log.Fatal("listen error", e)
-	}
+
+	return r	
 }
 

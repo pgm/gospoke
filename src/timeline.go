@@ -208,12 +208,7 @@ func (t *Timeline) RunUntil(timestamp int64) {
 }
 
 func (t *Timeline) Execute(c CallbackFn) {
-	a := make(chan bool)
-	t.Schedule(t.Now(), func() { 
-		c()
-		a <- true
-		})
-	_ = <-a
+	t.Schedule(t.Now(), c)
 }
 
 

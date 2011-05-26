@@ -1,0 +1,3 @@
+[submodule "3rdparty/mustache"]
+	path = 3rdparty/mustache
+	url = https://github.com/hoisie/mustache.go.git

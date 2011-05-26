@@ -3,45 +3,132 @@ package main
 import (
 	"log"
 	"http"
-	"template"
-	"io"
+	"os"
+//	"io"
 	"github.com/kless/goconfig/config"
-	"fmt"
+	"net"
 	"strings"
+	"github.com/hoisie/mustache.go"
+	"path"
+	"json"
+	"strconv"
 	)
 
-type snapshots struct {
-	Snapshots []ServiceSnapshot
+type reqHandler struct {
+	hub ThreadSafeServiceHub
+	templateDir string
 }
 
-func listServices(hub* ServiceHub, w http.ResponseWriter, r *http.Request) {
-	fmtrs := make(template.FormatterMap)
-	fmtrs["status"] = func(w io.Writer, formatter string, data ...interface{}) {
-		v := data[0].(int)
-		s := "unknown"
-		
-		if v == STATUS_UP {
-			s = "up"
-		} else if v == STATUS_DOWN {
-			s = "down"
-		}
-		
-		w.Write([]uint8(s))
-	}
-
-	t, err := template.ParseFile("index.html", fmtrs)
+func (h *reqHandler) render(filename string, context interface{}, w http.ResponseWriter) {
+	t, err := mustache.ParseFile(h.templateDir + "/" + filename)
 	
 	if err != nil {
-		//http.Redirect(w, r, "/", http.StatusFound)		
 		http.Error(w, err.String(), http.StatusInternalServerError)
+		log.Println(err.String())
 		return
 	}
-	
 
-	ss := hub.GetServiceSnapshots()
-	err = t.Execute(w, &snapshots{ss})
-	if err != nil {
-		log.Println(err.String())
+	result := t.Render(context)
+	w.Write([]byte(result))
+}
+
+func (h *reqHandler) listServices(w http.ResponseWriter, r *http.Request) {
+	ss := h.hub.GetServices()
+
+	h.render("dashboard.tpl", map[string]interface{}{"services":ss}, w)
+}
+
+func (h *reqHandler) listEventsData(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceName, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+
+	entries := h.hub.GetLogEntries(serviceName[0])
+
+	transformed := make([] map [string] interface{}, 0, 100)
+	for _, l := range(entries) {
+		t := make(map[string] interface{})
+		t["service"] = l.ServiceName
+		t["summary"] = l.Summary
+		t["severity"] = l.Severity
+		t["timestamp"] = l.Timestamp
+		t["id"] = l.Sequence
+
+		transformed = append(transformed, t)
+	}
+
+	result := map[string]interface{}{"recordsReturned": len(transformed),
+	    "totalRecords": len(transformed),
+    	"startIndex": 0,
+      	"sort": nil,
+     	"dir": nil,
+      	"pageSize": 10,
+      	"records": transformed }
+
+	enc := json.NewEncoder(w)
+	enc.Encode(result)
+}
+
+func (h *reqHandler) listEvents(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceNameArray, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+	serviceName := serviceNameArray[0]
+
+	h.render("table.tpl", map[string]interface{}{"service":serviceName}, w)
+}
+
+func (h *reqHandler) removeEvents(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	eventIds, exists := r.Form["id"]
+	if exists {
+		for _, eventIdStr := range(eventIds) {
+			eventId, err := strconv.Atoi(eventIdStr)
+			if ( err == nil ) {	
+				h.hub.RemoveLogEntry(eventId)
+			}
+		}
+	}
+	http.Redirect(w, r, "/list-events", http.StatusTemporaryRedirect)
+}
+
+func (h *reqHandler) disableService(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceName, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+	h.hub.SetServiceEnabled(serviceName[0], false)
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+func (h *reqHandler) enableService(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceName, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+	h.hub.SetServiceEnabled(serviceName[0], true)
+
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+}
+
+func (h *reqHandler) makeFileServer(directory string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, urlFilename := path.Split(r.RawURL)
+
+		filename := path.Join(directory, urlFilename)
+
+		fi, err := os.Stat(filename)
+
+		if err == nil && fi.IsRegular() {
+			http.ServeFile(w, r, filename)
+		}
 	}
 }
 
@@ -49,7 +136,7 @@ func main() {
 	conf, err := config.ReadDefault("gospoke.ini")
 	
 	if err != nil {
-		fmt.Println(err)
+		log.Fatalln(err)
 	}
 
 	timeline := NewTimeline(new (RealTimer) )
@@ -57,6 +144,7 @@ func main() {
 
 	notifierCommand, _ := conf.String("default", "notifier_command")
 	notifierThrottle, _ := conf.Int("default", "notifier_throttle")
+	listeningAddr, _ := conf.String("default", "listen")
 
 	notifier := NewNotifier(notifierCommand, notifierThrottle * 1000, ExecuteCommand, timeline, hub)
 	
@@ -70,22 +158,47 @@ func main() {
 	}
 
 	hub.notifier = notifier
+	threadSafeHub := NewHubAdapter(hub)
 
-	log.Println("Starting rpc")
-	go StartJsonRpcServer(hub)
-	
-	log.Println("Starting timeline")
-	go timeline.Run()
+	h := &reqHandler{threadSafeHub, "../views"}
 
-	log.Println("Starting http server")
+	http.Handle("/jsonrpc", MewJsonRpcHandler(threadSafeHub, timeline))
+	http.HandleFunc("/blueprint/", h.makeFileServer("../3rdparty/blueprint"))
+	http.HandleFunc("/css/", h.makeFileServer("../css"))
+	http.HandleFunc("/img/", h.makeFileServer("../img"))
+	http.HandleFunc("/js/", h.makeFileServer("../js"))
 
-	http.HandleFunc("/css/", func (w http.ResponseWriter, r *http.Request) { 
-		http.ServeFile(w, r, filename)
-	})
-	
+	// I've got enough of these maybe I should refactor somehow
+	// punting because perhaps I can find an existing framework to adopt instead
+	// of rolling my own.
 	http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
-		listServices(hub, w, r)
+		h.listServices(w, r)
+	})
+	http.HandleFunc("/list-events", func (w http.ResponseWriter, r *http.Request) {
+		h.listEvents(w, r)
+	})
+	http.HandleFunc("/list-events-data", func (w http.ResponseWriter, r *http.Request) {
+		(w, r)
+	})
+	http.HandleFunc("/remove-events", func (w http.ResponseWriter, r *http.Request) {
+		h.removeEvents(w, r)
+	})
+	http.HandleFunc("/disable-service", func (w http.ResponseWriter, r *http.Request) {
+		h.disableService(w, r)
+	})
+	http.HandleFunc("/enable-service", func (w http.ResponseWriter, r *http.Request) {
+		h.enableService(w, r)
 	})
 	
-	http.ListenAndServe(":8080", nil)
+	log.Println("Starting http server on "+listeningAddr)
+
+	l, e := net.Listen("tcp", listeningAddr)
+	if e != nil {
+		log.Fatalln(e)
+	}
+	go http.Serve(l, nil)
+
+	log.Println("Starting timeline")
+
+	timeline.Run()
 }

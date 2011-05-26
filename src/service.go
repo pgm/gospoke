@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"bytes"
-	"log"
+//	"log"
+	"sort"
 	)
 
 const ( 
@@ -22,12 +23,14 @@ const (
 
 type Service struct {
 	Name string
+	Enabled bool
 	Monitor *HeartbeatMonitor
 	Status int
 	Log ServiceLog
 }
 
 type LogEntry struct {
+	ServiceName string
 	Summary string
 	Severity int
 	Timestamp int64
@@ -48,72 +51,240 @@ type ServiceHub struct {
 type ServiceSnapshot struct {
 	Name string
 	Status int
+	IsUp bool
+	IsDown bool
+	IsUnknown bool
+	Enabled bool
+	Notifications []NotificationSummary
 }
 
-func (h *ServiceHub) GetServiceSnapshots() []ServiceSnapshot {
-	ss := make([]ServiceSnapshot, 0, len(h.services))
-	
-	for _, v := range(h.services) {
-		ss = append(ss, ServiceSnapshot{v.Name, v.Status})
+type NotificationSummary struct {
+	Severity int
+	Count int
+}
+
+type ApiError struct {
+	error string
+}
+
+func (e ApiError) String() string {
+	return e.error
+}
+
+// contract between service hub and all threads running outside of 
+// timeline thread
+type ThreadSafeServiceHub interface {
+	Log(serviceName string, summary string, severity int, timestamp int64) *ApiError
+	Heartbeat(serviceName string) *ApiError
+
+	GetLogEntries(serviceName string) []*LogEntry
+	RemoveLogEntry(sequence int)
+	GetServices() []ServiceSnapshot
+
+	SetServiceEnabled(serviceName string, enabled bool)
+}
+
+type ServiceHubAdapter struct {
+	hub *ServiceHub
+}
+
+func (a *ServiceHubAdapter) SetServiceEnabled(serviceName string, enabled bool) {
+	c := make(chan *ApiError)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		c <- hub.SetServiceEnabled(serviceName, enabled)
+	})
+
+	<-c
+}
+
+func (a *ServiceHubAdapter)	Log(serviceName string, summary string, severity int, timestamp int64) *ApiError {
+	c := make(chan *ApiError)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		c <- hub.Log(serviceName, summary, severity, timestamp)
+	})
+
+	return <-c
+}
+
+func (a *ServiceHubAdapter) Heartbeat (serviceName string) *ApiError  {
+	c := make(chan *ApiError)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		service, found := hub.services[serviceName]
+
+		if !found {
+			c <- &ApiError{"No service named \""+serviceName+"\""}
+			return 
+		}
+
+		if service.Monitor != nil {
+			service.Monitor.Heartbeat()
+		}
+
+		c <- nil
+	})
+
+	return <-c
+}
+
+func (a *ServiceHubAdapter) GetServices() []ServiceSnapshot {
+	c := make(chan []ServiceSnapshot)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		ss := make([]ServiceSnapshot, 0, len(hub.services))
+		
+		for _, v := range(hub.services) {
+			notifications := make([]NotificationSummary, 0, 10)
+
+			// count the number of message per severity
+			counts := make(map[int] int)
+			for _, l := range(v.Log.entries) {
+				c, exists := counts[l.Severity]
+				if !exists {
+					c = 0
+				}
+				c += 1
+				counts[l.Severity] = c
+			}
+
+			// now add them to the notification list ordered by severity
+			keys := make([]int, 0, len(notifications))
+			for k, _ := range(counts) {
+				keys = append(keys, k)
+			}
+			sort.SortInts(keys)
+
+			for _, k := range(keys) {
+				notifications = append(notifications, NotificationSummary{k, counts[k]})
+			}
+
+			ss = append(ss, ServiceSnapshot{v.Name, v.Status, v.Status == STATUS_UP, v.Status == STATUS_DOWN, v.Status == STATUS_UNKNOWN, v.Enabled, notifications})
+		}
+		c <- ss		
+	})
+
+	return <-c
+}
+
+func (a *ServiceHubAdapter) GetLogEntries(serviceName string) []*LogEntry {
+	c := make(chan []*LogEntry)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		ss := make([]*LogEntry, 0, 100)
+
+		service, found := hub.services[serviceName]
+		if ! found {
+			c <- ss
+			return
+		}
+
+		for _, v := range(service.Log.entries) {
+			ss = append(ss, v)
+		}
+
+		c <- ss
+	})
+
+	return <-c
+}
+
+func removeLogEntriesWithId(entries []*LogEntry, sequenceToDel int) []*LogEntry {
+	dest := 0
+	for i, v := range(entries) {
+		if v.Sequence == sequenceToDel { 
+			continue
+		}
+		entries[dest] = entries[i]
+		dest++
 	}
-	
-	return ss
+	return entries[:dest]
 }
 
+func (a *ServiceHubAdapter) RemoveLogEntry(sequence int) {
+	c := make(chan bool)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		for _, service := range(hub.services) {
+			service.Log.entries = removeLogEntriesWithId(service.Log.entries, sequence)
+		}
+
+		c <- true
+	})
+		
+	<-c
+}
+
+func NewHubAdapter(hub *ServiceHub) *ServiceHubAdapter {
+	return &ServiceHubAdapter{hub}
+}
+
+////////////////////////////////////////////////////////////////////////
 
 func NewServiceHub(timeline *Timeline) *ServiceHub {
 	hub := &ServiceHub{timeline: timeline, services: make(map[string] *Service)}
+	hub.logEntryCounter = 1
 	return hub
+}
+
+func (h *ServiceHub) SetServiceEnabled(serviceName string, enabled bool) *ApiError {
+	service, found := h.services[serviceName]
+
+	if !found {
+		return &ApiError{"No service named \""+serviceName+"\""}
+	}
+
+	service.Enabled = enabled	
+
+	return nil
+}
+
+func (h *ServiceHub) Log(serviceName string, summary string, severity int, timestamp int64) *ApiError {
+	service, found := h.services[serviceName]
+
+	if !found {
+		return &ApiError{"No service named \""+serviceName+"\""}
+	}
+
+	seq := h.nextSequenceId()
+	service.Log.entries = append(service.Log.entries, &LogEntry{serviceName, summary, severity, timestamp, seq})
+	h.notifier.CheckAndSendNotifications()
+
+	return nil
 }
 
 func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int) {
 	var s *Service
+	s = &Service{Name: serviceName, Enabled: true, Status: STATUS_UNKNOWN}
 
 	heartbeatCallback := func(name string, isFailure bool) {
 		if isFailure {
-			h.Log(serviceName, WARN, "Heartbeat failure", h.timeline.Now())
+			h.Log(serviceName, "Heartbeat failure", WARN,  h.timeline.Now())
 			s.Status = STATUS_DOWN
 		} else {
 			s.Status = STATUS_UP
 		}
 	}
 
-	monitor := NewHeartbeatMonitor(h.timeline, serviceName, heartbeatTimeout, heartbeatCallback)
-	s = &Service{Name: serviceName, Monitor: monitor, Status: STATUS_UNKNOWN}
+	s.Monitor = NewHeartbeatMonitor(h.timeline, serviceName, heartbeatTimeout, heartbeatCallback)
 	
 	h.services[serviceName] = s
 	
-	monitor.Start()
+	s.Monitor.Start()
 }
 
-func (h *ServiceHub) Heartbeat(serviceName string) {
-	service := h.getService(serviceName)
-	
-	if service.Monitor != nil {
-		service.Monitor.Heartbeat()
-	} else {
-		log.Println("Unknown service \"%s\"", serviceName)
-	}
-}
 
-func (h *ServiceHub) getService(serviceName string) *Service {
-	service, exists := h.services[serviceName]
-	if !exists {
-		service = &Service{Name: serviceName}
-		h.services[serviceName] = service
-	}
-	return service
-}
-
-func (h *ServiceHub) Log(serviceName string, severity int, summary string, timestamp int64) {
-	service := h.getService(serviceName)
-	
+func (h *ServiceHub) nextSequenceId() int {
 	h.logEntryCounter += 1
 	seq := h.logEntryCounter
-	
-	service.Log.entries = append(service.Log.entries, &LogEntry{summary, severity, timestamp, seq})
-
-	h.notifier.CheckAndSendNotifications()
+	return seq
 }
 
 func (l *ServiceLog) FindAfter(sequence int) []*LogEntry {
@@ -159,11 +330,15 @@ func (n *Notifier) CheckAndSendNotifications() {
 }
 
 func (n *Notifier) sendNotificationSummary() {
+
+	// find all outstanding notifications, grouping them by service
 	msgsByService := make(map[string] []string)
 	maxSeq := 0
-
-	// find all outstanding notifications
 	for k, v := range(n.hub.services) {
+		if !v.Enabled{
+			continue
+		}
+
 		e := v.Log.FindAfter(n.lastCheckSeq)
 		if len(e) > 0 {
 			msgs := make([]string, 0, len(e))
