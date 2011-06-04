@@ -4,7 +4,6 @@ import (
 	"log"
 	"http"
 	"os"
-//	"io"
 	"github.com/kless/goconfig/config"
 	"net"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"path"
 	"json"
 	"strconv"
+	"flag"
 	)
 
 type reqHandler struct {
@@ -133,7 +133,15 @@ func (h *reqHandler) makeFileServer(directory string) http.HandlerFunc {
 }
 
 func main() {
-	conf, err := config.ReadDefault("gospoke.ini")
+	flag.Parse()
+	args := flag.Args()
+	
+	configFilename := "gospoke.ini"
+	if len(args) > 0 {
+		configFilename = args[0]
+	}
+	
+	conf, err := config.ReadDefault(configFilename)
 	
 	if err != nil {
 		log.Fatalln(err)
@@ -145,6 +153,7 @@ func main() {
 	notifierCommand, _ := conf.String("default", "notifier_command")
 	notifierThrottle, _ := conf.Int("default", "notifier_throttle")
 	listeningAddr, _ := conf.String("default", "listen")
+	resourceDir, _ := conf.String("default", "resource_dir")
 
 	notifier := NewNotifier(notifierCommand, notifierThrottle * 1000, ExecuteCommand, timeline, hub)
 	
@@ -160,13 +169,13 @@ func main() {
 	hub.notifier = notifier
 	threadSafeHub := NewHubAdapter(hub)
 
-	h := &reqHandler{threadSafeHub, "../views"}
+	h := &reqHandler{threadSafeHub, resourceDir+"/views"}
 
 	http.Handle("/jsonrpc", MewJsonRpcHandler(threadSafeHub, timeline))
-	http.HandleFunc("/blueprint/", h.makeFileServer("../3rdparty/blueprint"))
-	http.HandleFunc("/css/", h.makeFileServer("../css"))
-	http.HandleFunc("/img/", h.makeFileServer("../img"))
-	http.HandleFunc("/js/", h.makeFileServer("../js"))
+	http.HandleFunc("/blueprint/", h.makeFileServer(resourceDir+"/css/blueprint"))
+	http.HandleFunc("/css/", h.makeFileServer(resourceDir+"/css"))
+	http.HandleFunc("/img/", h.makeFileServer(resourceDir+"/img"))
+	http.HandleFunc("/js/", h.makeFileServer(resourceDir+"/js"))
 
 	// I've got enough of these maybe I should refactor somehow
 	// punting because perhaps I can find an existing framework to adopt instead
@@ -178,7 +187,7 @@ func main() {
 		h.listEvents(w, r)
 	})
 	http.HandleFunc("/list-events-data", func (w http.ResponseWriter, r *http.Request) {
-		(w, r)
+		h.listEventsData(w, r)
 	})
 	http.HandleFunc("/remove-events", func (w http.ResponseWriter, r *http.Request) {
 		h.removeEvents(w, r)
@@ -199,6 +208,5 @@ func main() {
 	go http.Serve(l, nil)
 
 	log.Println("Starting timeline")
-
 	timeline.Run()
 }
