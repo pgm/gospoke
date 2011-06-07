@@ -262,7 +262,7 @@ func (h *ServiceHub) Log(serviceName string, summary string, severity int, times
 
 func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int) {
 	var s *Service
-	s = &Service{Name: serviceName, Enabled: true, Status: STATUS_UNKNOWN}
+	s = &Service{Name: serviceName, Enabled: false, Status: STATUS_UNKNOWN}
 
 	heartbeatCallback := func(name string, isFailure bool) {
 		if isFailure {
