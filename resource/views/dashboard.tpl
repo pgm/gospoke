@@ -14,7 +14,7 @@
   <tr>
     <td>
       {{#IsDown}}<img src="img/red.png">{{/IsDown}}
-      {{#IsUnknown}}<img src="img/red.png">{{/IsUnknown}}
+      {{#IsUnknown}}<img src="img/gray.png">{{/IsUnknown}}
       {{#IsUp}}<img src="img/green.png">{{/IsUp}}
     </td>
     <td>
