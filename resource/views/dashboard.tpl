@@ -6,7 +6,8 @@
   	<th class="span-1">Status</th>
   	<th class="span-3">Service</th>
   	<th class="span-3">Notifications</th>
-    <th class="span-3">Alerts?</th>
+	<th class="span-3">Alerts?</th>
+	<th class="span-1">Last heartbeat</th>
   	<th>Description</th>
   </tr>
 
@@ -36,6 +37,8 @@
     </td>
 
 
+    <td>
+    </td>
     <td>
     </td>
   </tr>

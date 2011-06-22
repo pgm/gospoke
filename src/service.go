@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"bytes"
 //	"log"
+	"time"
 	"sort"
 	)
 
@@ -26,6 +27,8 @@ type Service struct {
 	Enabled bool
 	Monitor *HeartbeatMonitor
 	Status int
+	HeartbeatCount int
+	LastHeartbeatTimestamp int64
 	Log ServiceLog
 }
 
@@ -51,6 +54,7 @@ type ServiceHub struct {
 type ServiceSnapshot struct {
 	Name string
 	Status int
+	LastHeartbeatTimestamp string
 	IsUp bool
 	IsDown bool
 	IsUnknown bool
@@ -164,7 +168,14 @@ func (a *ServiceHubAdapter) GetServices() []ServiceSnapshot {
 				notifications = append(notifications, NotificationSummary{k, counts[k]})
 			}
 
-			ss = append(ss, ServiceSnapshot{v.Name, v.Status, v.Status == STATUS_UP, v.Status == STATUS_DOWN, v.Status == STATUS_UNKNOWN, v.Enabled, notifications})
+			var timestamp string
+			if v.HeartbeatCount == 0 {
+				timestamp = ""
+			} else {
+				timestamp = time.SecondsToLocalTime(v.LastHeartbeatTimestamp).Format(time.Kitchen)
+			}
+
+			ss = append(ss, ServiceSnapshot{v.Name, v.Status, timestamp, v.Status == STATUS_UP, v.Status == STATUS_DOWN, v.Status == STATUS_UNKNOWN, v.Enabled, notifications})
 		}
 		c <- ss		
 	})
@@ -270,6 +281,8 @@ func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int) {
 			s.Status = STATUS_DOWN
 		} else {
 			s.Status = STATUS_UP
+			s.HeartbeatCount += 1
+			s.LastHeartbeatTimestamp = h.timeline.Now()
 		}
 	}
 

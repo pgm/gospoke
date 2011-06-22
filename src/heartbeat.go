@@ -29,7 +29,8 @@ func (h *HeartbeatMonitor) checkHeartbeatTimeout() {
 }
 
 func (h *HeartbeatMonitor) Start() {
-	h.Heartbeat()
+	h.lastHeartbeat = h.timeline.Now()
+	h.scheduleHeartbeatTimeout()
 }
 
 func (h *HeartbeatMonitor) Heartbeat() {
@@ -37,8 +38,8 @@ func (h *HeartbeatMonitor) Heartbeat() {
 	if h.failed {
 		log.Println("okay",h.name);
 		h.failed = false
-		h.callback(h.name, h.failed)
-	}
+	} 
+	h.callback(h.name, h.failed)
 	h.scheduleHeartbeatTimeout()	
 }
 
