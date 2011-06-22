@@ -13,7 +13,7 @@ YAHOO.example.DynamicData = function() {
         {key:"severity", label:"Severity", sortable:true},
         {key:"service", label:"Service", sortable:false},
         {key:"summary", label:"Summary", sortable:true},
-        //{key:"timestamp", label:"Timestamp", sortable:true, formatter:myFormatDateTime}
+        {key:"timestamp", label:"Timestamp", sortable:true, formatter:myFormatDateTime}
     ];
 
     // Custom parser
@@ -31,7 +31,7 @@ YAHOO.example.DynamicData = function() {
             {key:"severity"},
             {key:"service"},
             {key:"summary"},
-            //{key:"timestamp", parser:stringToDate}
+            {key:"timestamp", parser:stringToDate}
         ],
         metaFields: {
             totalRecords: "totalRecords" // Access to value in the server response
