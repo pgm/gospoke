@@ -112,7 +112,14 @@ func MewJsonRpcHandler (hub ThreadSafeServiceHub, timeline *Timeline) *JsonRpcHa
 
 		name := params["name"].(string)
 		summary := params["summary"].(string)
-		severity := params["severity"].(int)
+
+		var severity int
+		s := params["severity"]
+		if _, ok := s.(float64) ; ok {
+			severity = int(s.(float64))
+		} else {
+			severity = s.(int)
+		}
 
 		hub.Log(name, summary, severity, timeline.Now())
 		
