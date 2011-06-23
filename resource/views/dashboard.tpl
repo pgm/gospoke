@@ -6,8 +6,8 @@
   	<th class="span-1">Status</th>
   	<th class="span-3">Service</th>
   	<th class="span-3">Notifications</th>
-	<th class="span-3">Alerts?</th>
-	<th class="span-1">Last heartbeat</th>
+	<th class="span-2">Alerts?</th>
+	<th class="span-1">Heartbeat</th>
   	<th>Description</th>
   </tr>
 
@@ -29,15 +29,14 @@
 
     <td>
     {{#Enabled}}
-      <img src="img/notify_on.png"><a href="disable-service?service={{Name}}">Disable</a>
+      <img src="img/notify_on.png"><div><a href="disable-service?service={{Name}}">Disable</a></div>
     {{/Enabled}}
     {{^Enabled}}
       <a href="enable-service?service={{Name}}">Enable</a>
     {{/Enabled}}
     </td>
-
-
     <td>
+    {{LastHeartbeatTimestamp}}
     </td>
     <td>
     </td>

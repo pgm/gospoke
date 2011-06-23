@@ -172,7 +172,7 @@ func (a *ServiceHubAdapter) GetServices() []ServiceSnapshot {
 			if v.HeartbeatCount == 0 {
 				timestamp = ""
 			} else {
-				timestamp = time.SecondsToLocalTime(v.LastHeartbeatTimestamp).Format(time.Kitchen)
+				timestamp = time.SecondsToLocalTime(v.LastHeartbeatTimestamp/1000).Format(time.Kitchen)
 			}
 
 			ss = append(ss, ServiceSnapshot{v.Name, v.Status, timestamp, v.Status == STATUS_UP, v.Status == STATUS_DOWN, v.Status == STATUS_UNKNOWN, v.Enabled, notifications})
