@@ -348,10 +348,6 @@ func (n *Notifier) sendNotificationSummary() {
 	msgsByService := make(map[string] []string)
 	maxSeq := 0
 	for k, v := range(n.hub.services) {
-		if !v.Enabled{
-			continue
-		}
-
 		e := v.Log.FindAfter(n.lastCheckSeq)
 		if len(e) > 0 {
 			msgs := make([]string, 0, len(e))
@@ -360,13 +356,20 @@ func (n *Notifier) sendNotificationSummary() {
 				if l.Sequence > maxSeq {
 					maxSeq = l.Sequence
 				}
-				msgs = append(msgs, fmt.Sprintf("%s: %s", k, l.Summary))
+
+				// wait until the last moment to test v.Enabled so that maxSeq gets updated
+				if v.Enabled && l.Severity >= WARN {
+					msgs = append(msgs, fmt.Sprintf("%s: %s", k, l.Summary))
+				}
 			}
 
-			msgsByService[k] = msgs
+			if len(msgs) > 0 {
+				msgsByService[k] = msgs
+			}
 		}
 	}
-	
+
+	// remember where we left off so we can identify what are new notifications	
 	if n.lastCheckSeq < maxSeq {
 		n.lastCheckSeq = maxSeq
 	}
