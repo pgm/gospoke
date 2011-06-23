@@ -3,12 +3,12 @@
 <h2>Services monitored</h2>
 <table>
   <tr>
-  	<th class="span-1">Status</th>
-  	<th class="span-3">Service</th>
-  	<th class="span-3">Notifications</th>
-	<th class="span-2">Alerts?</th>
-	<th class="span-1">Heartbeat</th>
-  	<th>Description</th>
+    <th class="span-1">Status</th>
+    <th class="span-3">Service</th>
+    <th class="span-3">Notifications</th>
+    <th class="span-2">Alerts?</th>
+    <th class="span-1">Heartbeat</th>
+    <th>Description</th>
   </tr>
 
 {{#services}}

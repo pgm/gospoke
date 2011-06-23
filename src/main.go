@@ -82,6 +82,20 @@ func (h *reqHandler) listEvents(w http.ResponseWriter, r *http.Request) {
 	h.render("table.tpl", map[string]interface{}{"service":serviceName}, w)
 }
 
+func (h *reqHandler) removeServiceEvents(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceName, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+
+	entries := h.hub.GetLogEntries(serviceName[0])
+	for _, entry := range(entries) {
+		h.hub.RemoveLogEntry(entry.Sequence)
+	}
+	http.Redirect(w, r, "/list-events", http.StatusTemporaryRedirect)
+}
+
 func (h *reqHandler) removeEvents(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	eventIds, exists := r.Form["id"]
@@ -191,6 +205,9 @@ func main() {
 	})
 	http.HandleFunc("/remove-events", func (w http.ResponseWriter, r *http.Request) {
 		h.removeEvents(w, r)
+	})
+	http.HandleFunc("/remove-service-events", func (w http.ResponseWriter, r *http.Request) {
+		h.removeServiceEvents(w, r)
 	})
 	http.HandleFunc("/disable-service", func (w http.ResponseWriter, r *http.Request) {
 		h.disableService(w, r)

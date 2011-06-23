@@ -38,9 +38,13 @@ YAHOO.example.DynamicData = function() {
         }
     };
     
+    var getServiceId = function() {
+        var service_id = YAHOO.util.Dom.get('service_id').value;
+        return service_id;
+    }
+
     var makeEventQueryUrl = function() {
-    	var service_id = YAHOO.util.Dom.get('service_id').value;
-    	return "service="+service_id;
+    	return "service="+getServiceId();
     }
     
     // DataTable configuration
@@ -77,6 +81,19 @@ YAHOO.example.DynamicData = function() {
 				
 				myDataTable.getDataSource().sendRequest(request, callback);
     }
+
+    var onClearAllEventsButtonClick = function(event) {
+        var callback = {
+            success : function(o) { refreshTable(); },
+            failure : function(o) { console.log("failure"); },
+            scope   : this,
+            argument: this
+            };
+
+        var postData = "service="+encodeURIComponent(getServiceId())
+        YAHOO.util.Connect.asyncRequest('POST', 'remove-service-events', callback, postData);
+        
+    }
     
     var onClearEventsButtonClick = function(event) {  
     	var rowIds = myDataTable.getSelectedRows();
@@ -105,6 +122,7 @@ YAHOO.example.DynamicData = function() {
     	refreshTable();
     };
     
+    var clearAllEventsButton = new YAHOO.widget.Button("clear-all-events", { onclick: { fn: onClearAllEventsButtonClick } }); 
     var clearEventsButton = new YAHOO.widget.Button("clear-events", { onclick: { fn: onClearEventsButtonClick } }); 
 	var refreshEventsButton = new YAHOO.widget.Button("refresh-events", { onclick: { fn: onRefreshEventsButtonClick } }); 
 	YAHOO.util.Event.addListener("service_filter", "change", refreshTable);

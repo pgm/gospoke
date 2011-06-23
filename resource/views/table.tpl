@@ -6,6 +6,7 @@
 
 <!-- summary <input type="text">  -->
 <input type="hidden" id="service_id" value="{{service}}">
+<input type="button" id="clear-all-events" value="Clear all">
 <input type="button" id="clear-events" value="Clear selected">
 <input type="button" id="refresh-events" value="Refresh">
 <div id="dynamicdata"></div>
