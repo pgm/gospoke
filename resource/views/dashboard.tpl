@@ -11,37 +11,46 @@
     <th>Description</th>
   </tr>
 
-{{#services}}
+{{#groups}}
   <tr>
-    <td>
-      {{#IsDown}}<img src="img/red.png">{{/IsDown}}
-      {{#IsUnknown}}<img src="img/gray.png">{{/IsUnknown}}
-      {{#IsUp}}<img src="img/green.png">{{/IsUp}}
-    </td>
-    <td>
-      <a href="/list-events?service={{Name}}">{{Name}}</a>
-    </td>
-    <td>
-      {{#Notifications}}
-        <span class="event-class-{{Severity}}">{{Count}}</span>
-      {{/Notifications}}
-    </td>
-
-    <td>
-    {{#Enabled}}
-      <img src="img/notify_on.png"><div><a href="disable-service?service={{Name}}">Disable</a></div>
-    {{/Enabled}}
-    {{^Enabled}}
-      <a href="enable-service?service={{Name}}">Enable</a>
-    {{/Enabled}}
-    </td>
-    <td>
-    {{LastHeartbeatTimestamp}}
-    </td>
-    <td>
-    </td>
+  <td colspan="6">{{Group}}</td>
   </tr>
-{{/services}}
+
+  {{#Services}}
+    <tr>
+      <td>
+        {{#IsDown}}<img src="img/red.png">{{/IsDown}}
+        {{#IsUnknown}}<img src="img/gray.png">{{/IsUnknown}}
+        {{#IsUp}}<img src="img/green.png">{{/IsUp}}
+      </td>
+      <td>
+        <a href="/list-events?service={{Name}}">{{Name}}</a>
+      </td>
+      <td>
+        {{#Notifications}}
+          <span class="event-class-{{Severity}}">{{Count}}</span>
+        {{/Notifications}}
+      </td>
+
+      <td>
+      {{#Enabled}}
+        <img src="img/notify_on.png"><div><a href="disable-service?service={{Name}}">Disable</a></div>
+	<div>{{FilterCount}} filters</div>
+      {{/Enabled}}
+      {{^Enabled}}
+        <a href="enable-service?service={{Name}}">Enable</a>
+      {{/Enabled}}
+      </td>
+      <td>
+      {{LastHeartbeatTimestamp}}
+      </td>
+      <td>
+      {{Description}}
+      </td>
+    </tr>
+  {{/Services}}
+{{/groups}}
+
 
 </table>
 

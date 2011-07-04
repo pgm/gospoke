@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"bytes"
-//	"log"
 	"time"
 	"sort"
+	"regexp"
 	)
 
 const ( 
@@ -30,6 +30,9 @@ type Service struct {
 	HeartbeatCount int
 	LastHeartbeatTimestamp int64
 	Log ServiceLog
+	Group string
+	Description string
+	NotificationFilters map[int] *regexp.Regexp
 }
 
 type LogEntry struct {
@@ -60,6 +63,9 @@ type ServiceSnapshot struct {
 	IsUnknown bool
 	Enabled bool
 	Notifications []NotificationSummary
+	Description string
+	Group string
+	FilterCount int
 }
 
 type NotificationSummary struct {
@@ -75,6 +81,11 @@ func (e ApiError) String() string {
 	return e.error
 }
 
+type FilterSnapshot struct {
+	Id int
+	Expression string
+}
+
 // contract between service hub and all threads running outside of 
 // timeline thread
 type ThreadSafeServiceHub interface {
@@ -84,12 +95,39 @@ type ThreadSafeServiceHub interface {
 	GetLogEntries(serviceName string) []*LogEntry
 	RemoveLogEntry(sequence int)
 	GetServices() []ServiceSnapshot
+	GetNotificationFilters(serviceName string) []*FilterSnapshot
 
 	SetServiceEnabled(serviceName string, enabled bool)
+	RemoveNotificationFilter(serviceName string, id int)
+	AddNotificationFilter(serviceName string, expression *regexp.Regexp)
 }
 
 type ServiceHubAdapter struct {
 	hub *ServiceHub
+}
+
+func (a *ServiceHubAdapter) AddNotificationFilter(serviceName string, expression *regexp.Regexp) {
+	c := make(chan *ApiError)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		hub.AddNotificationFilter(serviceName, expression)
+		c<-nil
+	})
+
+	<-c	
+}
+
+func (a *ServiceHubAdapter) RemoveNotificationFilter(serviceName string, id int) {
+	c := make(chan *ApiError)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		hub.RemoveNotificationFilter(serviceName, id)
+		c<-nil
+	})
+
+	<-c	
 }
 
 func (a *ServiceHubAdapter) SetServiceEnabled(serviceName string, enabled bool) {
@@ -175,7 +213,12 @@ func (a *ServiceHubAdapter) GetServices() []ServiceSnapshot {
 				timestamp = time.SecondsToLocalTime(v.LastHeartbeatTimestamp/1000).Format(time.Kitchen)
 			}
 
-			ss = append(ss, ServiceSnapshot{v.Name, v.Status, timestamp, v.Status == STATUS_UP, v.Status == STATUS_DOWN, v.Status == STATUS_UNKNOWN, v.Enabled, notifications})
+			ss = append(ss, ServiceSnapshot{v.Name, 
+				v.Status, 
+				timestamp, 
+				v.Status == STATUS_UP, v.Status == STATUS_DOWN, v.Status == STATUS_UNKNOWN, 
+				v.Enabled, notifications, v.Description, v.Group, 
+				len(v.NotificationFilters) })
 		}
 		c <- ss		
 	})
@@ -201,6 +244,29 @@ func (a *ServiceHubAdapter) GetLogEntries(serviceName string) []*LogEntry {
 		}
 
 		c <- ss
+	})
+
+	return <-c
+}
+
+func (a *ServiceHubAdapter) GetNotificationFilters(serviceName string) []*FilterSnapshot {
+	c := make(chan []*FilterSnapshot)
+	hub := a.hub
+
+	hub.timeline.Execute(func() {
+		fs := make([]*FilterSnapshot, 0, 100)
+
+		service, found := hub.services[serviceName]
+		if ! found {
+			c <- fs
+			return
+		}
+
+		for k, v := range(service.NotificationFilters) {
+			fs = append(fs, &FilterSnapshot{k, v.String()})
+		}
+
+		c <- fs
 	})
 
 	return <-c
@@ -245,6 +311,32 @@ func NewServiceHub(timeline *Timeline) *ServiceHub {
 	return hub
 }
 
+func (h *ServiceHub) AddNotificationFilter(serviceName string, expression *regexp.Regexp) *ApiError{
+	service, found := h.services[serviceName]
+
+	if !found {
+		return &ApiError{"No service named \""+serviceName+"\""}
+	}
+
+	id := h.nextSequenceId()
+	
+	service.NotificationFilters[id] = expression
+
+	return nil
+}
+
+func (h *ServiceHub) RemoveNotificationFilter(serviceName string, id int) *ApiError{
+	service, found := h.services[serviceName]
+
+	if !found {
+		return &ApiError{"No service named \""+serviceName+"\""}
+	}
+
+	service.NotificationFilters[id] = nil, false
+
+	return nil
+}
+
 func (h *ServiceHub) SetServiceEnabled(serviceName string, enabled bool) *ApiError {
 	service, found := h.services[serviceName]
 
@@ -271,9 +363,9 @@ func (h *ServiceHub) Log(serviceName string, summary string, severity int, times
 	return nil
 }
 
-func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int) {
+func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int, group string, description string, enabled bool) {
 	var s *Service
-	s = &Service{Name: serviceName, Enabled: false, Status: STATUS_UNKNOWN}
+	s = &Service{Name: serviceName, Enabled: enabled, Status: STATUS_UNKNOWN, Description: description, Group: group, NotificationFilters: make(map[int]*regexp.Regexp) }
 
 	heartbeatCallback := func(name string, isFailure bool) {
 		if isFailure {
@@ -342,6 +434,19 @@ func (n *Notifier) CheckAndSendNotifications() {
 	}
 }
 
+func isAllowingNotifications(service *Service, entry *LogEntry ) bool {
+	summary := entry.Summary
+
+	// check each filter
+	for _, filter := range(service.NotificationFilters) {
+		if filter.FindStringIndex(summary) != nil {
+			return false
+		}
+	}
+
+	return service.Enabled && entry.Severity >= WARN
+}
+
 func (n *Notifier) sendNotificationSummary() {
 
 	// find all outstanding notifications, grouping them by service
@@ -358,7 +463,7 @@ func (n *Notifier) sendNotificationSummary() {
 				}
 
 				// wait until the last moment to test v.Enabled so that maxSeq gets updated
-				if v.Enabled && l.Severity >= WARN {
+				if isAllowingNotifications(v, l) {
 					msgs = append(msgs, fmt.Sprintf("%s: %s", k, l.Summary))
 				}
 			}

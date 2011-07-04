@@ -3,6 +3,7 @@ package main
 import ( 
 	"os"
 	"fmt"
+	"log"
 	)
 
 func ExecuteCommand(command string, input string) {
@@ -23,6 +24,7 @@ func ExecuteCommand(command string, input string) {
 		go func () {
 			_, _ = stdinWrite.Write(inputBytes)
 			stdinWrite.Close()
+			log.Println("Completed writing to child proccs")
 		}()
 
 		go func () { 
@@ -45,17 +47,21 @@ func ExecuteCommand(command string, input string) {
 			
 			stdoutRead.Close()
 
+			log.Println("Waiting to reap child process")
 			// reap child process
 			_, _ = proc.Wait(0)
 			
 //			if error != nil { 
 //				fmt.Printf("error=%v\n", error)
 //			}
+			log.Println("Go routine terminating")
 		}()
 		
 	} else {
+		log.Println("Error: "+err.String())
 		stdoutRead.Close()
 		stdinWrite.Close()
+		log.Println("Cleaned up handles after error")
 	}
 	
 //	return err

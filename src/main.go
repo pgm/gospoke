@@ -12,6 +12,7 @@ import (
 	"json"
 	"strconv"
 	"flag"
+	"regexp"
 	)
 
 type reqHandler struct {
@@ -32,10 +33,32 @@ func (h *reqHandler) render(filename string, context interface{}, w http.Respons
 	w.Write([]byte(result))
 }
 
+type ServiceGroup struct {
+	Group string
+	Services []*ServiceSnapshot
+}
+
 func (h *reqHandler) listServices(w http.ResponseWriter, r *http.Request) {
 	ss := h.hub.GetServices()
 
-	h.render("dashboard.tpl", map[string]interface{}{"services":ss}, w)
+	// group service by group
+	groups := make(map[string] []*ServiceSnapshot)
+	for _, s := range(ss) {
+		groupServices, hasGroup := groups[s.Group]
+		if !hasGroup {
+			groupServices = make([]*ServiceSnapshot, 0, 100)
+		}
+		// copy because s gets overwritten each iteration
+		t := s
+		groups[s.Group] = append(groupServices, &t)
+	}
+
+	sg := make([]*ServiceGroup, 0, len(groups))
+	for g, servicesForGroup := range(groups) {
+		sg = append(sg, &ServiceGroup{g, servicesForGroup})
+	}
+
+	h.render("dashboard.tpl", map[string]interface{}{"groups":sg}, w)
 }
 
 func (h *reqHandler) listEventsData(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +102,9 @@ func (h *reqHandler) listEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	serviceName := serviceNameArray[0]
 
-	h.render("table.tpl", map[string]interface{}{"service":serviceName}, w)
+	filters := h.hub.GetNotificationFilters(serviceName)
+
+	h.render("table.tpl", map[string]interface{}{"service":serviceName, "filters": filters}, w)
 }
 
 func (h *reqHandler) removeServiceEvents(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +157,47 @@ func (h *reqHandler) enableService(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
+func (h *reqHandler) addNotificationFilter(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceName, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+	exprString, exprExists := r.Form["regexp"]
+	if ! exprExists {
+		return
+	}
+
+	regexp, expError := regexp.Compile(exprString[0])
+	if expError != nil {
+		log.Println("error: "+expError.String())
+		return
+	}
+
+	h.hub.AddNotificationFilter(serviceName[0], regexp)
+
+	http.Redirect(w, r, "/list-events?service="+serviceName[0], http.StatusTemporaryRedirect)
+}
+
+func (h *reqHandler) removeNotificationFilter(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceName, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+
+	idString, idExists := r.Form["id"]
+	if ! idExists {
+		return
+	}
+
+	id, _ :=  strconv.Atoi(idString[0])
+
+	h.hub.RemoveNotificationFilter(serviceName[0],  id)
+
+	http.Redirect(w, r, "/list-events?service="+serviceName[0], http.StatusTemporaryRedirect)
+}
+
 func (h *reqHandler) makeFileServer(directory string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, urlFilename := path.Split(r.RawURL)
@@ -176,7 +242,25 @@ func main() {
 			name, _ := conf.String(s, "name")
 			heartbeatTimeout, _ := conf.Int(s, "timeout")
 
-			hub.AddService(name, heartbeatTimeout * 1000)
+			group, groupPresent := conf.String(s, "group")
+			if groupPresent != nil { 
+				log.Println("group: "+groupPresent.String())
+				group = "default"
+			}
+
+			description, descPresent := conf.String(s, "description")
+			if descPresent != nil {
+				log.Println("desc: "+descPresent.String())
+				description = ""
+			}
+
+			enabled, enabledPresent := conf.Bool(s, "enabled")
+			if enabledPresent != nil {
+				log.Println("enabled: "+enabledPresent.String())
+				enabled = false;
+			}
+
+			hub.AddService(name, heartbeatTimeout * 1000, group, description, enabled)
 		}
 	}
 
@@ -215,6 +299,13 @@ func main() {
 	http.HandleFunc("/enable-service", func (w http.ResponseWriter, r *http.Request) {
 		h.enableService(w, r)
 	})
+	http.HandleFunc("/add-notification-filter", func (w http.ResponseWriter, r *http.Request) {
+		h.addNotificationFilter(w, r)
+	})
+	http.HandleFunc("/remove-notification-filter", func (w http.ResponseWriter, r *http.Request) {
+		h.removeNotificationFilter(w, r)
+	})
+
 	
 	log.Println("Starting http server on "+listeningAddr)
 
