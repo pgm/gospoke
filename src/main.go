@@ -212,6 +212,13 @@ func (h *reqHandler) makeFileServer(directory string) http.HandlerFunc {
 	}
 }
 
+func parseTimeOfDay(tstr string) int {
+	parts := strings.Split(tstr, ":", 2)
+	hour, _ := strconv.Atoi(parts[0])
+	minute, _ := strconv.Atoi(parts[1])
+	return hour * 60 + minute
+}
+
 func main() {
 	flag.Parse()
 	args := flag.Args()
@@ -260,7 +267,19 @@ func main() {
 				enabled = false;
 			}
 
-			hub.AddService(name, heartbeatTimeout * 1000, group, description, enabled)
+			notificationStartTimeStr, nstartpresent := conf.String(s, "notificationsStart")
+			if nstartpresent != nil {
+				notificationStartTimeStr = "00:00"
+			}
+			notificationStart := parseTimeOfDay(notificationStartTimeStr)
+
+			notificationStopTimeStr, nstoppresent := conf.String(s, "notificationsStop")
+			if nstoppresent != nil {
+				notificationStopTimeStr = "24:00"
+			}
+			notificationStop := parseTimeOfDay(notificationStopTimeStr)
+
+			hub.AddService(name, heartbeatTimeout * 1000, group, description, enabled, notificationStart, notificationStop)
 		}
 	}
 

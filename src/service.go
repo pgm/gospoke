@@ -6,6 +6,7 @@ import (
 	"time"
 	"sort"
 	"regexp"
+	"log"
 	)
 
 const ( 
@@ -32,7 +33,11 @@ type Service struct {
 	Log ServiceLog
 	Group string
 	Description string
+	// filter on summary message 
 	NotificationFilters map[int] *regexp.Regexp
+	// filter on when notification was generated
+	NotificationFirstMinute int
+	NotificationLastMinute int
 }
 
 type LogEntry struct {
@@ -363,9 +368,16 @@ func (h *ServiceHub) Log(serviceName string, summary string, severity int, times
 	return nil
 }
 
-func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int, group string, description string, enabled bool) {
+func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int, group string, description string, enabled bool, nstart int, nstop int) {
 	var s *Service
-	s = &Service{Name: serviceName, Enabled: enabled, Status: STATUS_UNKNOWN, Description: description, Group: group, NotificationFilters: make(map[int]*regexp.Regexp) }
+	s = &Service{Name: serviceName, 
+		Enabled: enabled, 
+		Status: STATUS_UNKNOWN, 
+		Description: description, 
+		Group: group, 
+		NotificationFilters: make(map[int]*regexp.Regexp),
+		NotificationFirstMinute: nstart,
+		NotificationLastMinute: nstop }
 
 	heartbeatCallback := func(name string, isFailure bool) {
 		if isFailure {
@@ -436,6 +448,13 @@ func (n *Notifier) CheckAndSendNotifications() {
 
 func isAllowingNotifications(service *Service, entry *LogEntry ) bool {
 	summary := entry.Summary
+
+	localTime := time.SecondsToLocalTime(entry.Timestamp/1000)
+	minuteOfDay := localTime.Hour * 60 + localTime.Minute
+	log.Printf("minuteOfDay=%d first=%d last=%d\n", minuteOfDay, service.NotificationFirstMinute, service.NotificationLastMinute)
+	if minuteOfDay < service.NotificationFirstMinute || minuteOfDay > service.NotificationLastMinute {
+		return false
+	}
 
 	// check each filter
 	for _, filter := range(service.NotificationFilters) {
