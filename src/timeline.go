@@ -250,11 +250,9 @@ func (t *RealTimer) SleepUntil(cond *sync.Cond, timestamp int64) {
 	now := t.Now()
 	delay := timestamp - now
 	if delay > 0 {
-		go func() {
-			time.Sleep(delay*1000000)
-			cond.Broadcast()
-		}()
+		tt := time.AfterFunc(delay*1000000, func() { cond.Broadcast() } );
 		t.Sleep(cond)
+		tt.Stop()
 	}
 }
 
