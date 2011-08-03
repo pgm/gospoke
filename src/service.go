@@ -451,7 +451,7 @@ func isAllowingNotifications(service *Service, entry *LogEntry ) bool {
 
 	localTime := time.SecondsToLocalTime(entry.Timestamp/1000)
 	minuteOfDay := localTime.Hour * 60 + localTime.Minute
-	log.Printf("minuteOfDay=%d first=%d last=%d\n", minuteOfDay, service.NotificationFirstMinute, service.NotificationLastMinute)
+	//log.Printf("minuteOfDay=%d first=%d last=%d\n", minuteOfDay, service.NotificationFirstMinute, service.NotificationLastMinute)
 	if minuteOfDay < service.NotificationFirstMinute || minuteOfDay > service.NotificationLastMinute {
 		return false
 	}
