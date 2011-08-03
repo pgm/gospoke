@@ -4,7 +4,7 @@ YAHOO.example.DynamicData = function() {
     }
 
 	var myFormatDateTime = function (elCell, oRecord, oColumn, oData) {
-		elCell.innerHTML = oData.getFullYear() + "/" + twodigits(oData.getMonth()) + "/" + twodigits(oData.getDate()) + " " + twodigits(oData.getHours()) + ":" + twodigits(oData.getMinutes()) + ":" + twodigits(oData.getSeconds());
+		elCell.innerHTML = oData.getFullYear() + "/" + twodigits(oData.getMonth()+1) + "/" + twodigits(oData.getDate()) + " " + twodigits(oData.getHours()) + ":" + twodigits(oData.getMinutes()) + ":" + twodigits(oData.getSeconds());
 	}
 
     // Column definitions
