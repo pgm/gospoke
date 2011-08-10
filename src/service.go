@@ -6,7 +6,6 @@ import (
 	"time"
 	"sort"
 	"regexp"
-	"log"
 	)
 
 const ( 
