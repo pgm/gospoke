@@ -103,9 +103,13 @@ func MewJsonRpcHandler (hub ThreadSafeServiceHub, timeline *Timeline) *JsonRpcHa
 	r.Register("heartbeat", func(params map[string] interface{}) interface{} {
 		name := params["name"].(string)
 		
-		hub.Heartbeat(name)
+		err := hub.Heartbeat(name)
 
-		return true
+		if err == nil {
+			return true
+		}
+
+		return makeJsonRpcError(100, err.String())
 	})
 
 	r.Register("log", func(params map[string] interface{}) interface{} {
@@ -115,15 +119,24 @@ func MewJsonRpcHandler (hub ThreadSafeServiceHub, timeline *Timeline) *JsonRpcHa
 
 		var severity int
 		s := params["severity"]
+		
 		if _, ok := s.(float64) ; ok {
 			severity = int(s.(float64))
 		} else {
 			severity = s.(int)
 		}
 
-		hub.Log(name, summary, severity, timeline.Now())
+// else {
+//			severity = strconv.Atoi(s.(string))
+//		}
+
+		err := hub.Log(name, summary, severity, timeline.Now())
 		
-		return true
+		if err == nil {
+			return true
+		}
+
+		return makeJsonRpcError(100, err.String())
 	})
 
 	return r	

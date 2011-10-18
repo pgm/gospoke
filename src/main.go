@@ -65,13 +65,33 @@ func (h *reqHandler) listEventsData(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	serviceName, exists := r.Form["service"]
 	if ! exists {
+//		log.Println("no service")
 		return
+	}
+
+	startIndex := 0
+	pageSize := 50
+
+	startIndexStr, startIndexStrExists := r.Form["startIndex"]
+	if startIndexStrExists {
+		startIndex, _ = strconv.Atoi(startIndexStr[0])	
+	}
+
+	if pageSizeStr, pageSizeStrExists := r.Form["results"] ; pageSizeStrExists {
+		pageSize, _ = strconv.Atoi(pageSizeStr[0])
 	}
 
 	entries := h.hub.GetLogEntries(serviceName[0])
 
 	transformed := make([] map [string] interface{}, 0, 100)
-	for _, l := range(entries) {
+	for index, l := range(entries) {
+		if index < startIndex {
+			// kinda stupid to loop through until we get to startIndex, but 
+			// on a plane and no internet.  Can't look up the go docs at the
+			// moment to see if I can give range a start/stop index.
+			continue;
+		}
+
 		t := make(map[string] interface{})
 		t["service"] = l.ServiceName
 		t["summary"] = l.Summary
@@ -80,15 +100,23 @@ func (h *reqHandler) listEventsData(w http.ResponseWriter, r *http.Request) {
 		t["id"] = l.Sequence
 
 		transformed = append(transformed, t)
+
+		// once we've got a full page, stop
+		if len(transformed) >= pageSize {
+			break;
+		}
 	}
 
 	result := map[string]interface{}{"recordsReturned": len(transformed),
-	    "totalRecords": len(transformed),
-    	"startIndex": 0,
-      	"sort": nil,
-     	"dir": nil,
-      	"pageSize": 10,
-      	"records": transformed }
+	    "totalRecords": len(entries),
+	    "startIndex": startIndex,
+	    "sort": nil,
+	    "dir": nil,
+	    "pageSize": pageSize,
+	    "records": transformed }
+
+
+//	log.Println("write result")
 
 	enc := json.NewEncoder(w)
 	enc.Encode(result)

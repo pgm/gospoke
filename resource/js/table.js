@@ -47,12 +47,24 @@ YAHOO.example.DynamicData = function() {
     	return "service="+getServiceId();
     }
     
+    var myRequestBuilder = function(oState, oSelf) {
+        oState = oState || { pagination: null, sortedBy: null };
+        var startIndex = (oState.pagination) ? oState.pagination.recordOffset : 0;
+        var results = (oState.pagination) ? oState.pagination.rowsPerPage : 25;
+     
+        // Build custom request
+        return  "startIndex=" + startIndex +
+                "&pageSize=" + results +
+		"&"+ makeEventQueryUrl();
+    }
+    
     // DataTable configuration
     var myConfigs = {
         initialRequest: makeEventQueryUrl(), // Initial request for first page of data
         dynamicData: true, // Enables dynamic server-driven data
         sortedBy : {key:"id", dir:YAHOO.widget.DataTable.CLASS_ASC}, // Sets UI initial sort arrow
-        paginator: new YAHOO.widget.Paginator({ rowsPerPage:25 }) // Enables pagination 
+        paginator: new YAHOO.widget.Paginator({ rowsPerPage:50 }), // Enables pagination 
+        generateRequest: myRequestBuilder
     };
     
     // DataTable instance
