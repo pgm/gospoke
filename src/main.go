@@ -122,6 +122,35 @@ func (h *reqHandler) listEventsData(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(result)
 }
 
+func (h *reqHandler) showServiceStatus(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	serviceNameArray, exists := r.Form["service"]
+	if ! exists {
+		return
+	}
+	serviceName := serviceNameArray[0]
+
+	ss := h.hub.GetServices()
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+	result := "UNKNOWN"
+
+	// group service by group
+	for _, s := range(ss) {
+		if s.Name == serviceName {
+			if s.Enabled {
+				result = "ON"
+			} else {
+				result = "OFF"
+			}
+			break
+		}
+	}
+
+	w.Write([]byte(result))
+}
+
 func (h *reqHandler) listEvents(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	serviceNameArray, exists := r.Form["service"]
@@ -327,6 +356,9 @@ func main() {
 	// of rolling my own.
 	http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
 		h.listServices(w, r)
+	})
+	http.HandleFunc("/service-status", func (w http.ResponseWriter, r *http.Request) {
+		h.showServiceStatus(w, r)
 	})
 	http.HandleFunc("/list-events", func (w http.ResponseWriter, r *http.Request) {
 		h.listEvents(w, r)
