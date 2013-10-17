@@ -204,7 +204,7 @@ func (a *ServiceHubAdapter) GetServices() []ServiceSnapshot {
 			for k, _ := range(counts) {
 				keys = append(keys, k)
 			}
-			sort.SortInts(keys)
+			sort.Sort(sort.IntSlice(keys))
 
 			for _, k := range(keys) {
 				notifications = append(notifications, NotificationSummary{k, counts[k]})
@@ -214,7 +214,7 @@ func (a *ServiceHubAdapter) GetServices() []ServiceSnapshot {
 			if v.HeartbeatCount == 0 {
 				timestamp = ""
 			} else {
-				timestamp = time.SecondsToLocalTime(v.LastHeartbeatTimestamp/1000).Format(time.Kitchen)
+				timestamp = time.Unix(v.LastHeartbeatTimestamp/1000, 0).Format(time.Kitchen)
 			}
 
 			ss = append(ss, ServiceSnapshot{v.Name, 
@@ -336,7 +336,7 @@ func (h *ServiceHub) RemoveNotificationFilter(serviceName string, id int) *ApiEr
 		return &ApiError{"No service named \""+serviceName+"\""}
 	}
 
-	service.NotificationFilters[id] = nil, false
+	delete(service.NotificationFilters, id)
 
 	return nil
 }
@@ -448,8 +448,8 @@ func (n *Notifier) CheckAndSendNotifications() {
 func isAllowingNotifications(service *Service, entry *LogEntry ) bool {
 	summary := entry.Summary
 
-	localTime := time.SecondsToLocalTime(entry.Timestamp/1000)
-	minuteOfDay := localTime.Hour * 60 + localTime.Minute
+	localTime := time.Unix(entry.Timestamp/1000,0)
+	minuteOfDay := localTime.Hour() * 60 + localTime.Minute()
 	//log.Printf("minuteOfDay=%d first=%d last=%d\n", minuteOfDay, service.NotificationFirstMinute, service.NotificationLastMinute)
 	if minuteOfDay < service.NotificationFirstMinute || minuteOfDay > service.NotificationLastMinute {
 		return false

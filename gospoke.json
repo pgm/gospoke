@@ -1,0 +1,17 @@
+{
+"NotifierThrottle":20,
+"NotifierCommand":"./notify_command.sh",
+"Listen":":9199",
+"ResourceDir":"resource",
+"Services":[
+	{"Name":"Alpha",
+	"Timeout":10,
+	"Enabled":true,
+	"Description":"Description",
+	"NotificationStop":"21:40"
+	},
+	{"Name":"Beta",
+	"Timeout":5,
+	"Enabled":true
+	}
+]}

@@ -4,9 +4,7 @@ import (
 	"container/heap"
 	"bytes"
 	"fmt"
-	"os"
 	"time"
-	"log"
 	"sync"
 	)
 
@@ -238,19 +236,19 @@ type RealTimer struct {
 }
 
 func (t RealTimer) Now() int64 {
-	sec, nsec, err := os.Time()
-	if err != nil {
-		log.Fatal("Could not get time: %v", err)
-	}
+	now := time.Now()
+//	if err != nil {
+//		log.Fatal("Could not get time: %v", err)
+//	}
 
-	return sec * 1000 + nsec/1000000
+	return now.UnixNano()
 }
 
 func (t *RealTimer) SleepUntil(cond *sync.Cond, timestamp int64) {
 	now := t.Now()
 	delay := timestamp - now
 	if delay > 0 {
-		tt := time.AfterFunc(delay*1000000, func() { cond.Broadcast() } );
+		tt := time.AfterFunc(time.Duration(delay), func() { cond.Broadcast() } );
 		t.Sleep(cond)
 		tt.Stop()
 	}

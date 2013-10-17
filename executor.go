@@ -2,6 +2,7 @@ package main
 
 import ( 
 	"os"
+	"io"
 	"fmt"
 	"log"
 	)
@@ -11,7 +12,7 @@ func ExecuteCommand(command string, input string) {
 	stdoutRead, stdoutWrite, _ := os.Pipe()
 	stdinRead, stdinWrite, _ := os.Pipe()
 
-	attr := &os.ProcAttr{".", nil, []*os.File{stdinRead, stdoutWrite, stdoutWrite}}
+	attr := &os.ProcAttr{".", nil, []*os.File{stdinRead, stdoutWrite, stdoutWrite}, nil}
 	proc, err := os.StartProcess(command, []string{command}, attr)
 
 	stdoutWrite.Close()
@@ -40,7 +41,7 @@ func ExecuteCommand(command string, input string) {
 				}
 				
 				// if we reached the end, bail from this loop
-				if err == os.EOF {
+				if err == io.EOF {
 					break
 				}
 			}
@@ -49,7 +50,7 @@ func ExecuteCommand(command string, input string) {
 
 			log.Println("Waiting to reap child process")
 			// reap child process
-			_, _ = proc.Wait(0)
+			_, _ = proc.Wait()
 			
 //			if error != nil { 
 //				fmt.Printf("error=%v\n", error)
@@ -58,7 +59,7 @@ func ExecuteCommand(command string, input string) {
 		}()
 		
 	} else {
-		log.Println("Error: "+err.String())
+		log.Println("Error: "+err.Error())
 		stdoutRead.Close()
 		stdinWrite.Close()
 		log.Println("Cleaned up handles after error")

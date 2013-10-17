@@ -2,17 +2,17 @@ package main
 
 import (
 	"log"
-	"http"
+	"net/http"
 	"os"
-	"github.com/kless/goconfig/config"
 	"net"
 	"strings"
-	"github.com/hoisie/mustache.go"
+	"github.com/hoisie/mustache"
 	"path"
-	"json"
+	"encoding/json"
 	"strconv"
 	"flag"
 	"regexp"
+	"io/ioutil"
 	)
 
 type reqHandler struct {
@@ -20,12 +20,31 @@ type reqHandler struct {
 	templateDir string
 }
 
+type optionsDef struct {
+	NotifierThrottle int
+	NotifierCommand string
+	Listen string
+	ResourceDir string
+	Services []serviceDef
+}
+
+type serviceDef struct {
+	Name string
+	Group *string
+	Timeout int
+	Enabled *bool
+	Description *string
+	Link string
+	NotificationsStop *string
+	NotificationsStart *string
+}
+
 func (h *reqHandler) render(filename string, context interface{}, w http.ResponseWriter) {
 	t, err := mustache.ParseFile(h.templateDir + "/" + filename)
 	
 	if err != nil {
-		http.Error(w, err.String(), http.StatusInternalServerError)
-		log.Println(err.String())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err.Error())
 		return
 	}
 
@@ -227,7 +246,7 @@ func (h *reqHandler) addNotificationFilter(w http.ResponseWriter, r *http.Reques
 
 	regexp, expError := regexp.Compile(exprString[0])
 	if expError != nil {
-		log.Println("error: "+expError.String())
+		log.Println("error: "+expError.Error())
 		return
 	}
 
@@ -257,20 +276,20 @@ func (h *reqHandler) removeNotificationFilter(w http.ResponseWriter, r *http.Req
 
 func (h *reqHandler) makeFileServer(directory string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, urlFilename := path.Split(r.RawURL)
+		_, urlFilename := path.Split(r.URL.Path)
 
 		filename := path.Join(directory, urlFilename)
 
 		fi, err := os.Stat(filename)
 
-		if err == nil && fi.IsRegular() {
+		if err == nil && fi.Mode().IsRegular() {
 			http.ServeFile(w, r, filename)
 		}
 	}
 }
 
 func parseTimeOfDay(tstr string) int {
-	parts := strings.Split(tstr, ":", 2)
+	parts := strings.SplitN(tstr, ":", 2)
 	hour, _ := strconv.Atoi(parts[0])
 	minute, _ := strconv.Atoi(parts[1])
 	return hour * 60 + minute
@@ -280,13 +299,18 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 	
-	configFilename := "gospoke.ini"
+	configFilename := "gospoke.json"
 	if len(args) > 0 {
 		configFilename = args[0]
 	}
 	
-	conf, err := config.ReadDefault(configFilename)
-	
+	var conf optionsDef
+	b, read_err := ioutil.ReadFile(configFilename)
+	if read_err != nil {
+		log.Fatalln(read_err)
+	}
+
+	err := json.Unmarshal(b, &conf)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -294,50 +318,49 @@ func main() {
 	timeline := NewTimeline(new (RealTimer) )
 	hub := NewServiceHub(timeline)
 
-	notifierCommand, _ := conf.String("default", "notifier_command")
-	notifierThrottle, _ := conf.Int("default", "notifier_throttle")
-	listeningAddr, _ := conf.String("default", "listen")
-	resourceDir, _ := conf.String("default", "resource_dir")
+	notifierCommand := conf.NotifierCommand
+	notifierThrottle := conf.NotifierThrottle
+	listeningAddr := conf.Listen
+	resourceDir := conf.ResourceDir
 
 	notifier := NewNotifier(notifierCommand, notifierThrottle * 1000, ExecuteCommand, timeline, hub)
 	
-	for _, s := range(conf.Sections()) {
-		if strings.HasPrefix(s, "service") {
-			name, _ := conf.String(s, "name")
-			heartbeatTimeout, _ := conf.Int(s, "timeout")
+	for _, s := range(conf.Services) {
+		name := s.Name
+		heartbeatTimeout := s.Timeout
 
-			group, groupPresent := conf.String(s, "group")
-			if groupPresent != nil { 
-				log.Println("group: "+groupPresent.String())
-				group = "default"
-			}
-
-			description, descPresent := conf.String(s, "description")
-			if descPresent != nil {
-				log.Println("desc: "+descPresent.String())
-				description = ""
-			}
-
-			enabled, enabledPresent := conf.Bool(s, "enabled")
-			if enabledPresent != nil {
-				log.Println("enabled: "+enabledPresent.String())
-				enabled = false;
-			}
-
-			notificationStartTimeStr, nstartpresent := conf.String(s, "notificationsStart")
-			if nstartpresent != nil {
-				notificationStartTimeStr = "00:00"
-			}
-			notificationStart := parseTimeOfDay(notificationStartTimeStr)
-
-			notificationStopTimeStr, nstoppresent := conf.String(s, "notificationsStop")
-			if nstoppresent != nil {
-				notificationStopTimeStr = "24:00"
-			}
-			notificationStop := parseTimeOfDay(notificationStopTimeStr)
-
-			hub.AddService(name, heartbeatTimeout * 1000, group, description, enabled, notificationStart, notificationStop)
+		var group string
+		if s.Group == nil { 
+			group = "default"
+		} else {
+			group = *s.Group
 		}
+
+		var description string
+		if s.Description == nil {
+			description = ""
+		} else {
+			description = *s.Description
+		}
+
+		enabled := false
+		if s.Enabled != nil {
+			enabled = *s.Enabled
+		}
+
+		notificationStartTimeStr := "00:00"
+		if s.NotificationsStart != nil {
+			notificationStartTimeStr = *s.NotificationsStart
+		}
+		notificationStart := parseTimeOfDay(notificationStartTimeStr)
+
+		notificationStopTimeStr := "24:00"
+		if s.NotificationsStop != nil {
+			notificationStopTimeStr = *s.NotificationsStop
+		}
+		notificationStop := parseTimeOfDay(notificationStopTimeStr)
+
+		hub.AddService(name, heartbeatTimeout * 1000, group, description, enabled, notificationStart, notificationStop)
 	}
 
 	hub.notifier = notifier

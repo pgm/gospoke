@@ -1,2 +1,0 @@
-goinstall github.com/kless/goconfig/config
-goinstall github.com/hoisie/mustache.go

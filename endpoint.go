@@ -1,9 +1,9 @@
 package main
 
 import (
-	"http"
+	"net/http"
 //	"log"
-	"json"
+	"encoding/json"
 	"io"
 	)
 
