@@ -28,7 +28,7 @@ type Service struct {
 	Monitor *HeartbeatMonitor
 	Status int
 	HeartbeatCount int
-	LastHeartbeatTimestamp int64
+	LastHeartbeatTimestamp time.Time
 	Log ServiceLog
 	Group string
 	Description string
@@ -43,7 +43,7 @@ type LogEntry struct {
 	ServiceName string
 	Summary string
 	Severity int
-	Timestamp int64
+	Timestamp time.Time
 	Sequence int
 }
 
@@ -93,7 +93,7 @@ type FilterSnapshot struct {
 // contract between service hub and all threads running outside of 
 // timeline thread
 type ThreadSafeServiceHub interface {
-	Log(serviceName string, summary string, severity int, timestamp int64) *ApiError
+	Log(serviceName string, summary string, severity int, timestamp time.Time) *ApiError
 	Heartbeat(serviceName string) *ApiError
 
 	GetLogEntries(serviceName string) []*LogEntry
@@ -145,7 +145,7 @@ func (a *ServiceHubAdapter) SetServiceEnabled(serviceName string, enabled bool) 
 	<-c
 }
 
-func (a *ServiceHubAdapter)	Log(serviceName string, summary string, severity int, timestamp int64) *ApiError {
+func (a *ServiceHubAdapter)	Log(serviceName string, summary string, severity int, timestamp time.Time) *ApiError {
 	c := make(chan *ApiError)
 	hub := a.hub
 
@@ -214,7 +214,7 @@ func (a *ServiceHubAdapter) GetServices() []ServiceSnapshot {
 			if v.HeartbeatCount == 0 {
 				timestamp = ""
 			} else {
-				timestamp = time.Unix(v.LastHeartbeatTimestamp/1000, 0).Format(time.Kitchen)
+				timestamp = v.LastHeartbeatTimestamp.Format(time.Kitchen)
 			}
 
 			ss = append(ss, ServiceSnapshot{v.Name, 
@@ -353,7 +353,7 @@ func (h *ServiceHub) SetServiceEnabled(serviceName string, enabled bool) *ApiErr
 	return nil
 }
 
-func (h *ServiceHub) Log(serviceName string, summary string, severity int, timestamp int64) *ApiError {
+func (h *ServiceHub) Log(serviceName string, summary string, severity int, timestamp time.Time) *ApiError {
 	service, found := h.services[serviceName]
 
 	if !found {
@@ -367,7 +367,7 @@ func (h *ServiceHub) Log(serviceName string, summary string, severity int, times
 	return nil
 }
 
-func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout int, group string, description string, enabled bool, nstart int, nstop int) {
+func (h *ServiceHub) AddService(serviceName string, heartbeatTimeout time.Duration, group string, description string, enabled bool, nstart int, nstop int) {
 	var s *Service
 	s = &Service{Name: serviceName, 
 		Enabled: enabled, 
@@ -420,20 +420,20 @@ type ExecutorFn func (command string, input string)
 type Notifier struct { 
 	command string
 	lastCheckSeq int
-	lastSendTimestamp int64
+	lastSendTimestamp time.Time
 	timeline *Timeline
 	hub *ServiceHub
 	executor ExecutorFn
-	throttle int64
+	throttle time.Duration
 }
 
-func NewNotifier(command string, throttle int, executor ExecutorFn, timeline *Timeline, hub *ServiceHub) *Notifier {
-	return &Notifier{command: command, throttle: int64(throttle), timeline: timeline, hub: hub, executor: executor}
+func NewNotifier(command string, throttle time.Duration, executor ExecutorFn, timeline *Timeline, hub *ServiceHub) *Notifier {
+	return &Notifier{command: command, throttle: throttle, timeline: timeline, hub: hub, executor: executor}
 }
 
 func (n *Notifier) CheckAndSendNotifications() {
 	now := n.timeline.Now()
-	if now - n.lastSendTimestamp >= n.throttle { 
+	if now.Sub(n.lastSendTimestamp) >= n.throttle { 
 		// enough time has passed since the last send 
 		// so we can flush the event queue
 		
@@ -441,14 +441,14 @@ func (n *Notifier) CheckAndSendNotifications() {
 		n.sendNotificationSummary()
 	} else {
 		// too soon, so schedule a check of the queue after enough time has passed
-		n.timeline.Schedule(n.lastSendTimestamp + n.throttle, func() { n.CheckAndSendNotifications() } )
+		n.timeline.Schedule(n.lastSendTimestamp.Add(n.throttle), func() { n.CheckAndSendNotifications() } )
 	}
 }
 
 func isAllowingNotifications(service *Service, entry *LogEntry ) bool {
 	summary := entry.Summary
 
-	localTime := time.Unix(entry.Timestamp/1000,0)
+	localTime := entry.Timestamp
 	minuteOfDay := localTime.Hour() * 60 + localTime.Minute()
 	//log.Printf("minuteOfDay=%d first=%d last=%d\n", minuteOfDay, service.NotificationFirstMinute, service.NotificationLastMinute)
 	if minuteOfDay < service.NotificationFirstMinute || minuteOfDay > service.NotificationLastMinute {

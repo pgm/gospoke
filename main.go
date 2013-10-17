@@ -13,6 +13,7 @@ import (
 	"flag"
 	"regexp"
 	"io/ioutil"
+	"time"
 	)
 
 type reqHandler struct {
@@ -323,7 +324,7 @@ func main() {
 	listeningAddr := conf.Listen
 	resourceDir := conf.ResourceDir
 
-	notifier := NewNotifier(notifierCommand, notifierThrottle * 1000, ExecuteCommand, timeline, hub)
+	notifier := NewNotifier(notifierCommand, time.Duration(notifierThrottle) * time.Second, ExecuteCommand, timeline, hub)
 	
 	for _, s := range(conf.Services) {
 		name := s.Name
@@ -360,7 +361,7 @@ func main() {
 		}
 		notificationStop := parseTimeOfDay(notificationStopTimeStr)
 
-		hub.AddService(name, heartbeatTimeout * 1000, group, description, enabled, notificationStart, notificationStop)
+		hub.AddService(name, time.Duration(heartbeatTimeout) * time.Second, group, description, enabled, notificationStart, notificationStop)
 	}
 
 	hub.notifier = notifier

@@ -11,7 +11,7 @@ import (
 type CallbackFn func()
 
 type Event struct {
-	Timestamp int64
+	Timestamp time.Time
 	InsertSeq int
 	Callback CallbackFn
 } 
@@ -21,8 +21,8 @@ type EventSlice struct {
 }
 
 type Timer interface {
-	Now() int64
-	SleepUntil(cond *sync.Cond, time int64)
+	Now() time.Time
+	SleepUntil(cond *sync.Cond, time time.Time)
 	Sleep(cond *sync.Cond)
 }
 
@@ -51,7 +51,7 @@ func (v EventSlice) Len() int {
 }
 
 func (v EventSlice) Less(i, j int) bool {
-	tdelta := v.events[i].Timestamp - v.events[j].Timestamp
+	tdelta := v.events[i].Timestamp.Sub(v.events[j].Timestamp)
 	if tdelta == 0 {
 		return v.events[i].InsertSeq < v.events[j].InsertSeq
 	}
@@ -87,11 +87,11 @@ func (v EventSlice) String() string {
 	return b.String()
 }
 
-func (t Timeline) Now () int64 {
+func (t Timeline) Now () time.Time {
 	return t.timer.Now()
 }
 
-func (t *Timeline) Schedule(timestamp int64, callback CallbackFn) {
+func (t *Timeline) Schedule(timestamp time.Time, callback CallbackFn) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	
@@ -101,12 +101,12 @@ func (t *Timeline) Schedule(timestamp int64, callback CallbackFn) {
 	t.cond.Broadcast()
 }
 
-func (t *Timeline) SchedulePeriodic(timestamp int64, period int, endTime int64, callback CallbackFn) {
+func (t *Timeline) SchedulePeriodic(timestamp time.Time, period time.Duration, endTime time.Time, callback CallbackFn) {
 	nextTime := timestamp 
 	var execAndReschedule CallbackFn
 	execAndReschedule = func() {
-		nextTime += int64(period)
-		if nextTime < endTime {
+		nextTime = nextTime.Add(period)
+		if nextTime.Before(endTime) {
 			t.Schedule(nextTime, execAndReschedule)
 		}
 		callback()
@@ -129,7 +129,7 @@ func (t *Timeline) processNextEventAssumingLocked() bool {
 			break
 		} else {
 		
-			if t.timer.Now() < e.Timestamp {
+			if t.timer.Now().Before(e.Timestamp) {
 				// if we haven't reached the 
 				// timestamp of the next time then 
 				// go sleep until that time.  Now 
@@ -176,13 +176,13 @@ func (t *Timeline) Run() {
 	}
 }
 
-func (t *Timeline) sleepUntilNextEventOrTimestamp(timestamp int64) bool {
+func (t *Timeline) sleepUntilNextEventOrTimestamp(timestamp time.Time) bool {
 	for {
 		e := t.peek()
-		if e == nil || e.Timestamp > timestamp {
+		if e == nil || e.Timestamp.After(timestamp) {
 			t.timer.SleepUntil(t.cond, timestamp)
 			
-			if t.Now() >= timestamp {
+			if !(t.Now().Before(timestamp)) {
 				return false
 			}
 		} else {
@@ -193,7 +193,7 @@ func (t *Timeline) sleepUntilNextEventOrTimestamp(timestamp int64) bool {
 	return true
 }
 
-func (t *Timeline) RunUntil(timestamp int64) {
+func (t *Timeline) RunUntil(timestamp time.Time) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -213,15 +213,15 @@ func (t *Timeline) Execute(c CallbackFn) {
 ////////////
 
 type SimulatedTimer struct { 
-	time int64
+	time time.Time
 }
 
-func (t SimulatedTimer) Now() int64 {
+func (t SimulatedTimer) Now() time.Time {
 	return t.time
 }
 
-func (t *SimulatedTimer) SleepUntil(cond *sync.Cond, time int64) {
-	if t.time < time {
+func (t *SimulatedTimer) SleepUntil(cond *sync.Cond, time time.Time) {
+	if t.time.Before(time) {
 		t.time = time
 	}
 }
@@ -235,18 +235,18 @@ func (t SimulatedTimer) Sleep(cond *sync.Cond) {
 type RealTimer struct {
 }
 
-func (t RealTimer) Now() int64 {
+func (t RealTimer) Now() time.Time {
 	now := time.Now()
 //	if err != nil {
 //		log.Fatal("Could not get time: %v", err)
 //	}
 
-	return now.UnixNano()
+	return now
 }
 
-func (t *RealTimer) SleepUntil(cond *sync.Cond, timestamp int64) {
+func (t *RealTimer) SleepUntil(cond *sync.Cond, timestamp time.Time) {
 	now := t.Now()
-	delay := timestamp - now
+	delay := timestamp.Sub(now)
 	if delay > 0 {
 		tt := time.AfterFunc(time.Duration(delay), func() { cond.Broadcast() } );
 		t.Sleep(cond)
